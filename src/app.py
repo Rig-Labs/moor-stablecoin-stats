@@ -15,7 +15,7 @@ from queries import (
 
 # Constants
 PRECISION = 1e9
-GRAPHQL_URL = 'http://localhost:8080/v1/graphql'
+GRAPHQL_URL = 'https://indexer.dev.hyperindex.xyz/a9504c5/v1/graphql'
 
 # Set up the GraphQL client
 transport = RequestsHTTPTransport(url=GRAPHQL_URL)

@@ -1,0 +1,128 @@
+type BorrowOperations_OpenTroveEvent {
+  id: ID!
+  identity: String! @index
+  asset: String! @index
+  collateral: BigInt!
+  debt: BigInt!
+  timestamp: Int!
+  txHash: String!
+}
+
+type BorrowOperations_CloseTroveEvent {
+  id: ID!
+  identity: String! @index
+  asset: String! @index
+  collateral: BigInt!
+  debt: BigInt!
+  timestamp: Int!
+  txHash: String!
+}
+
+type BorrowOperations_AdjustTroveEvent {
+  id: ID!
+  identity: String! @index
+  asset: String! @index
+  collateral: BigInt!
+  debt: BigInt!
+  collateralChange: BigInt!
+  debtChange: BigInt!
+  isDebtIncrease: Boolean!
+  isCollateralIncrease: Boolean!
+  timestamp: Int!
+  txHash: String!
+}
+
+type FPTStaking_StakeEvent {
+  id: ID!
+  identity: String! @index
+  amount: BigInt!
+  timestamp: Int!
+  txHash: String!
+}
+
+type FPTStaking_UnstakeEvent {
+  id: ID!
+  identity: String! @index
+  amount: BigInt!
+  timestamp: Int!
+  txHash: String!
+}
+
+type StabilityPool_StabilityPoolLiquidationEvent {
+  id: ID!
+  asset: String! @index
+  debt_to_offset: BigInt!
+  collateral_to_offset: BigInt!
+  timestamp: Int!
+  txHash: String!
+}
+
+type StabilityPool_ProvideToStabilityPoolEvent {
+  id: ID!
+  identity: String! @index
+  amount: BigInt!
+  compounded_amount: BigInt!
+  timestamp: Int!
+  txHash: String!
+}
+
+type StabilityPool_WithdrawFromStabilityPoolEvent {
+  id: ID!
+  identity: String! @index
+  amount: BigInt!
+  compounded_amount: BigInt!
+  timestamp: Int!
+  txHash: String!
+}
+
+type TroveManager_TrovePartialLiquidationEvent {
+  id: ID!
+  identity: String! @index
+  asset: String! @index
+  remaining_debt: BigInt!
+  remaining_collateral: BigInt!
+  timestamp: Int!
+  txHash: String!
+}
+
+type TroveManager_TroveFullLiquidationEvent {
+  id: ID!
+  identity: String! @index
+  asset: String! @index
+  debt: BigInt!
+  collateral: BigInt!
+  timestamp: Int!
+  txHash: String!
+}
+
+type TroveManager_RedemptionEvent {
+  id: ID!
+  identity: String! @index
+  asset: String! @index
+  usdf_amount: BigInt!
+  collateral_amount: BigInt!
+  collateral_price: BigInt!
+  timestamp: Int!
+  txHash: String!
+}
+
+type USDF_TotalSupplyEvent {
+  id: ID!
+  amount: BigInt!
+  timestamp: Int!
+  txHash: String!
+}
+
+type USDF_Mint {
+  id: ID!
+  amount: BigInt!
+  timestamp: Int!
+  txHash: String!
+}
+
+type USDF_Burn {
+  id: ID!
+  amount: BigInt!
+  timestamp: Int!
+  txHash: String!
+}

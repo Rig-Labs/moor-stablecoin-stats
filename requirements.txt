@@ -6,3 +6,4 @@ requests>=2.31.0
 fastapi>=0.104.0
 uvicorn[standard]>=0.24.0
 fastapi-cache2[redis]>=0.2.1 
+requests_toolbelt>=0.10.1

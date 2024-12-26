@@ -12,10 +12,11 @@ from queries import (
     REDEMPTION_QUERY,
     LIQUIDATION_QUERY,
 )
+import os
 
 # Constants
 PRECISION = 1e9
-GRAPHQL_URL = 'http://localhost:8080/v1/graphql'
+GRAPHQL_URL = os.getenv('GRAPHQL_URL', 'http://localhost:8080/v1/graphql')
 
 # Set up the GraphQL client
 transport = RequestsHTTPTransport(url=GRAPHQL_URL)

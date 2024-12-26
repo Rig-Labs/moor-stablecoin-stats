@@ -1,0 +1,6 @@
+fastapi
+uvicorn
+gql
+pandas
+fastapi-cache2
+requests_toolbelt

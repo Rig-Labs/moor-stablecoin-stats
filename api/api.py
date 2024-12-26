@@ -7,7 +7,7 @@ from fastapi_cache import FastAPICache
 from fastapi_cache.decorator import cache
 from fastapi_cache.backends.inmemory import InMemoryBackend
 from queries import MINT_BURN_QUERIES
-
+import os
 app = FastAPI()
 
 # Initialize cache on startup
@@ -17,7 +17,7 @@ async def startup():
 
 # Constants and client setup
 PRECISION = 1e9
-GRAPHQL_URL = 'https://indexer.dev.hyperindex.xyz/a9504c5/v1/graphql'
+GRAPHQL_URL = os.getenv('GRAPHQL_URL', 'http://localhost:8080/v1/graphql')
 CACHE_TTL = 4*60*60
 
 transport = RequestsHTTPTransport(url=GRAPHQL_URL)

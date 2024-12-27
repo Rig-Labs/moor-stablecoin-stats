@@ -233,6 +233,7 @@ def format_number(num):
         return f"{num:.3f}"
 
 # Streamlit app
+st.set_page_config(page_title="Fluid Analytics")
 st.title('Fluid Analytics')
 
 # Add metrics section

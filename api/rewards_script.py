@@ -11,6 +11,11 @@ ETH_SHARE = 0.45
 FUEL_SHARE = 0.55
 PRECISION = 1e9
 
+
+# Debug output for specific user
+DEBUG_WALLET = ""
+DEBUG_ASSET = ""
+
 # Time period constants
 START_DATE = datetime(2025, 1, 15).timestamp()
 END_DATE = datetime(2025, 2, 15).timestamp()
@@ -24,7 +29,7 @@ client = Client(transport=transport, fetch_schema_from_transport=True)
 TROVE_EVENTS_QUERY = """
 query {
     opens: BorrowOperations_OpenTroveEvent(
-        where: {timestamp: {_lte: %d}}
+        where: {timestamp: {_lte: %d}, asset: {_in: ["FUEL", "ETH"]}}
         order_by: {timestamp: asc}
     ) {
         identity
@@ -33,7 +38,7 @@ query {
         timestamp
     }
     closes: BorrowOperations_CloseTroveEvent(
-        where: {timestamp: {_lte: %d}}
+        where: {timestamp: {_lte: %d}, asset: {_in: ["FUEL", "ETH"]}}
         order_by: {timestamp: asc}
     ) {
         identity
@@ -41,7 +46,7 @@ query {
         timestamp
     }
     adjusts: BorrowOperations_AdjustTroveEvent(
-        where: {timestamp: {_gte: %d, _lte: %d}}
+        where: {timestamp: {_lte: %d}, asset: {_in: ["FUEL", "ETH"]}}
         order_by: {timestamp: asc}
     ) {
         identity
@@ -52,7 +57,7 @@ query {
         timestamp
     }
     liquidations: TroveManager_TroveFullLiquidationEvent(
-        where: {timestamp: {_lte: %d}}
+        where: {timestamp: {_lte: %d}, asset: {_in: ["FUEL", "ETH"]}}
         order_by: {timestamp: asc}
     ) {
         identity
@@ -60,7 +65,7 @@ query {
         timestamp
     }
     partial_liquidations: TroveManager_TrovePartialLiquidationEvent(
-        where: {timestamp: {_lte: %d}}
+        where: {timestamp: {_lte: %d}, asset: {_in: ["FUEL", "ETH"]}}
         order_by: {timestamp: asc}
     ) {
         identity
@@ -69,7 +74,7 @@ query {
         timestamp
     }
     redemptions: TroveManager_RedemptionEvent(
-        where: {timestamp: {_lte: %d}}
+        where: {timestamp: {_lte: %d}, asset: {_in: ["FUEL", "ETH"]}}
         order_by: {timestamp: asc}
     ) {
         identity
@@ -78,22 +83,8 @@ query {
         timestamp
     }
 }
-""" % (END_DATE, END_DATE, START_DATE, END_DATE, END_DATE, END_DATE, END_DATE)
+""" % (END_DATE, END_DATE, END_DATE, END_DATE, END_DATE, END_DATE)
 
-USDF_MINT_QUERY = """
-query {
-    USDF_Mint(order_by: {timestamp: asc}) {
-        amount
-        timestamp
-    }
-}
-"""
-
-def run_mint_query(client):
-    from gql import gql
-    query = gql(USDF_MINT_QUERY)
-    result = client.execute(query)
-    return result
 
 def calculate_rewards():
     # Fetch all events
@@ -117,18 +108,18 @@ def calculate_rewards():
     for event in result['closes']:
         key = (event['identity'], event['asset'])
         if key in troves and troves[key]:
-            # Find the relevant open period and close it
+            # Only close periods that started before this close event
             for period in troves[key]:
-                if period['end_time'] > int(event['timestamp']):
+                if period['start_time'] < int(event['timestamp']) and period['end_time'] > int(event['timestamp']):
                     period['end_time'] = int(event['timestamp'])
     
     # Process liquidation events
     for event in result['liquidations']:
         key = (event['identity'], event['asset'])
         if key in troves and troves[key]:
-            # Find the relevant open period and close it
+            # Only close periods that started before this liquidation
             for period in troves[key]:
-                if period['end_time'] > int(event['timestamp']):
+                if period['start_time'] < int(event['timestamp']) and period['end_time'] > int(event['timestamp']):
                     period['end_time'] = int(event['timestamp'])
     
     # Process partial liquidation events
@@ -136,9 +127,9 @@ def calculate_rewards():
         key = (event['identity'], event['asset'])
         timestamp = int(event['timestamp'])
         if key in troves and troves[key]:
-            # Find the active period for this partial liquidation
+            # Find the active period that started before this event
             for period in troves[key]:
-                if period['start_time'] <= timestamp and period['end_time'] > timestamp:
+                if period['start_time'] < timestamp and period['end_time'] > timestamp and period['end_time'] < int(event['timestamp']):
                     # Close the current period
                     old_end = period['end_time']
                     period['end_time'] = timestamp
@@ -161,7 +152,7 @@ def calculate_rewards():
         if key in troves and troves[key]:
             # Find the active period for this redemption
             for period in troves[key]:
-                if period['start_time'] <= timestamp and period['end_time'] > timestamp:
+                if period['start_time'] < timestamp and period['end_time'] > timestamp and period['end_time'] < int(event['timestamp']):
                     # Close the current period
                     old_end = period['end_time']
                     period['end_time'] = timestamp
@@ -186,7 +177,7 @@ def calculate_rewards():
         if key in troves and troves[key]:
             # Find the active period for this adjustment
             for period in troves[key]:
-                if period['start_time'] <= timestamp and period['end_time'] > timestamp:
+                if period['start_time'] < timestamp and period['end_time'] > timestamp and period['end_time'] < int(event['timestamp']):
                     # Close the current period
                     old_end = period['end_time']
                     period['end_time'] = timestamp
@@ -207,6 +198,18 @@ def calculate_rewards():
                     })
                     break
     
+    # debug periods print out for user
+    print(f"\nFinal processed trove periods for {DEBUG_WALLET}:")
+    if (DEBUG_WALLET, DEBUG_ASSET) in troves:
+        print(f"\n{DEBUG_ASSET} Trove periods:")
+        for period in troves[(DEBUG_WALLET, DEBUG_ASSET)]:
+            print(f"Start: {datetime.fromtimestamp(period['start_time'])}")
+            print(f"End: {datetime.fromtimestamp(period['end_time'])}")
+            print(f"Collateral: {period['collateral']}")
+            print("---")
+    else:
+        print(f"No {DEBUG_ASSET} trove periods found after processing")
+    
     # Filter out troves that were closed before our start date
     for key in list(troves.keys()):
         troves[key] = [period for period in troves[key] 
@@ -223,11 +226,16 @@ def calculate_rewards():
         total_weighted_collateral = 0
         
         for period in periods:
+            if identity == DEBUG_WALLET and asset == DEBUG_ASSET:
+                print(f"Processing period: {period}")
+            
             # Ensure period is within our time window
             start = max(period['start_time'], int(START_DATE))
             end = min(period['end_time'], int(END_DATE))
             
             if start < end:  # Valid period
+                if identity == DEBUG_WALLET and asset == DEBUG_ASSET:
+                    print(f"Valid period: {period}")
                 duration = end - start
                 weighted_collateral = period['collateral'] * (duration / TOTAL_PERIOD)
                 total_weighted_collateral += weighted_collateral
@@ -259,13 +267,90 @@ def calculate_rewards():
     
     # Create DataFrame and save to CSV
     rewards_df = pd.DataFrame([
-        {'wallet': wallet, 'amount': amount}
+        {'wallet': wallet, 'amount': (amount * 1e9 // 1) / 1e9}  # Floor to 9 decimal places
         for wallet, amount in all_rewards.items()
     ])
     
-    rewards_df.to_csv('trove_rewards.csv', index=False)
+
+    
+    # Debug raw events for this wallet
+    print(f"\nDEBUG RAW EVENTS for {DEBUG_WALLET}:")
+    print("\nOpen events:")
+    for event in result['opens']:
+        if event['identity'] == DEBUG_WALLET and event['asset'] == DEBUG_ASSET:
+            print(f"Asset: {event['asset']}")
+            print(f"Collateral: {float(event['collateral']) / PRECISION}")
+            print(f"Timestamp: {datetime.fromtimestamp(int(event['timestamp']))}")
+    
+    print("\nClose events:")
+    for event in result['closes']:
+        if event['identity'] == DEBUG_WALLET and event['asset'] == DEBUG_ASSET:
+            print(f"Asset: {event['asset']}")
+            print(f"Timestamp: {datetime.fromtimestamp(int(event['timestamp']))}")
+    
+    print("\nAdjust events:")
+    for event in result['adjusts']:
+        if event['identity'] == DEBUG_WALLET and event['asset'] == DEBUG_ASSET:
+            print(f"Asset: {event['asset']}")
+            print(f"Collateral Change: {float(event['collateralChange']) / PRECISION}")
+            print(f"Is Increase: {event['isCollateralIncrease']}")
+            print(f"Timestamp: {datetime.fromtimestamp(int(event['timestamp']))}")
+    
+    print("\nLiquidation events:")
+    for event in result['liquidations']:
+        if event['identity'] == DEBUG_WALLET and event['asset'] == DEBUG_ASSET:
+            print(f"Asset: {event['asset']}")
+            print(f"Timestamp: {datetime.fromtimestamp(int(event['timestamp']))}")
+    
+    print("\nPartial Liquidation events:")
+    for event in result['partial_liquidations']:
+        if event['identity'] == DEBUG_WALLET and event['asset'] == DEBUG_ASSET:
+            print(f"Asset: {event['asset']}")
+            print(f"Remaining Collateral: {float(event['remaining_collateral']) / PRECISION}")
+            print(f"Timestamp: {datetime.fromtimestamp(int(event['timestamp']))}")
+    
+    print("\nRedemption events:")
+    for event in result['redemptions']:
+        if event['identity'] == DEBUG_WALLET and event['asset'] == DEBUG_ASSET:
+            print(f"Asset: {event['asset']}")
+            print(f"Collateral Amount: {float(event['collateral_amount']) / PRECISION}")
+            print(f"Timestamp: {datetime.fromtimestamp(int(event['timestamp']))}")
+    
+    # After processing all events, show final trove periods
+    print(f"\nFinal processed trove periods for {DEBUG_WALLET}:")
+    if (DEBUG_WALLET, 'FUEL') in troves:
+        print("\nFUEL Trove periods:")
+        for period in troves[(DEBUG_WALLET, 'FUEL')]:
+            print(f"Start: {datetime.fromtimestamp(period['start_time'])}")
+            print(f"End: {datetime.fromtimestamp(period['end_time'])}")
+            print(f"Collateral: {period['collateral']} FUEL")
+            print(f"Duration: {period['end_time'] - period['start_time']} seconds")
+            print("---")
+    else:
+        print("No FUEL trove periods found after processing")
+        
+    if (DEBUG_WALLET, 'ETH') in troves:
+        print("\nETH Trove periods:")
+        for period in troves[(DEBUG_WALLET, 'ETH')]:
+            print(f"Start: {datetime.fromtimestamp(period['start_time'])}")
+            print(f"End: {datetime.fromtimestamp(period['end_time'])}")
+            print(f"Collateral: {period['collateral']} ETH")
+            print(f"Duration: {period['end_time'] - period['start_time']} seconds")
+            print("---")
+    else:
+        print("No ETH trove periods found after processing")
+    
+    # Show the filtering step
+    print(f"\nChecking if periods fall within reward window:")
+    print(f"Reward window start: {datetime.fromtimestamp(START_DATE)}")
+    print(f"Reward window end: {datetime.fromtimestamp(END_DATE)}")
+    
+    # Sort rewards in descending order
+    rewards_df = rewards_df.sort_values('amount', ascending=False)
+    
+    rewards_df.to_csv('trove_rewards.csv', index=False, float_format='%.9f')  # Format with 9 decimal places
     print(f"Rewards calculated and saved to trove_rewards.csv")
-    print(f"Total rewards distributed: {rewards_df['amount'].sum():,.2f}")
+    print(f"Total rewards distributed: {rewards_df['amount'].sum():,.9f}")
 
 if __name__ == "__main__":
     calculate_rewards()

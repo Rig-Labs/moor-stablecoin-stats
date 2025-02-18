@@ -13,8 +13,8 @@ PRECISION = 1e9
 
 
 # Debug output for specific user
-DEBUG_WALLET = ""
-DEBUG_ASSET = ""
+DEBUG_WALLET = "0xc0d78f5af8807319b3698045205e2e3232cda12b7cfe957038d15806de68b1b7"
+DEBUG_ASSET = "ETH"
 
 # Time period constants
 START_DATE = datetime(2025, 1, 15).timestamp()
@@ -129,7 +129,7 @@ def calculate_rewards():
         if key in troves and troves[key]:
             # Find the active period that started before this event
             for period in troves[key]:
-                if period['start_time'] < timestamp and period['end_time'] > timestamp and period['end_time'] < int(event['timestamp']):
+                if period['start_time'] < timestamp and period['end_time'] > timestamp:
                     # Close the current period
                     old_end = period['end_time']
                     period['end_time'] = timestamp
@@ -150,18 +150,12 @@ def calculate_rewards():
         key = (event['identity'], event['asset'])
         timestamp = int(event['timestamp'])
         if key in troves and troves[key]:
-            # Find the active period for this redemption
             for period in troves[key]:
-                if period['start_time'] < timestamp and period['end_time'] > timestamp and period['end_time'] < int(event['timestamp']):
-                    # Close the current period
+                if period['start_time'] < timestamp and period['end_time'] > timestamp:
                     old_end = period['end_time']
                     period['end_time'] = timestamp
-                    
-                    # Calculate new collateral after redemption
                     redeemed_amount = float(event['collateral_amount']) / PRECISION
                     new_collateral = period['collateral'] - redeemed_amount
-                    
-                    # Only create new period if there's remaining collateral
                     if new_collateral > 0:
                         troves[key].append({
                             'start_time': timestamp,
@@ -177,26 +171,26 @@ def calculate_rewards():
         if key in troves and troves[key]:
             # Find the active period for this adjustment
             for period in troves[key]:
-                if period['start_time'] < timestamp and period['end_time'] > timestamp and period['end_time'] < int(event['timestamp']):
-                    # Close the current period
-                    old_end = period['end_time']
-                    period['end_time'] = timestamp
-                    
-                    # Create a new period with updated collateral
-                    new_collateral = period['collateral']
-                    change = float(event['collateralChange']) / PRECISION
-                    if event['isCollateralIncrease']:
-                        new_collateral += change
-                    else:
-                        new_collateral -= change
-                    
-                    # Add the new period
-                    troves[key].append({
-                        'start_time': timestamp,
-                        'end_time': old_end,
-                        'collateral': new_collateral
-                    })
-                    break
+                    if period['start_time'] < timestamp and period['end_time'] > timestamp:
+                        # Close the current period
+                        old_end = period['end_time']
+                        period['end_time'] = timestamp
+                        
+                        # Create a new period with updated collateral
+                        new_collateral = period['collateral']
+                        change = float(event['collateralChange']) / PRECISION
+                        if event['isCollateralIncrease']:
+                            new_collateral += change
+                        else:
+                            new_collateral -= change
+                        
+                        # Add the new period
+                        troves[key].append({
+                            'start_time': timestamp,
+                            'end_time': old_end,
+                            'collateral': new_collateral
+                        })
+                        break
     
     # debug periods print out for user
     print(f"\nFinal processed trove periods for {DEBUG_WALLET}:")
@@ -210,12 +204,27 @@ def calculate_rewards():
     else:
         print(f"No {DEBUG_ASSET} trove periods found after processing")
     
-    # Filter out troves that were closed before our start date
+    # Filter out troves that lie fully before/after our reward window AND clamp them to the window
     for key in list(troves.keys()):
-        troves[key] = [period for period in troves[key] 
-                      if period['end_time'] > int(START_DATE) and 
-                         period['start_time'] < int(END_DATE)]
-        if not troves[key]:  # Remove empty entries
+        clamped_periods = []
+        for period in troves[key]:
+            # If the end is after the start date, and the start is before the end date,
+            # then there is at least some overlap with [START_DATE, END_DATE].
+            if period['end_time'] > int(START_DATE) and period['start_time'] < int(END_DATE):
+                # Clamp the start to START_DATE if it's earlier
+                if period['start_time'] < int(START_DATE):
+                    period['start_time'] = int(START_DATE)
+
+                # Clamp the end to END_DATE if it's later
+                if period['end_time'] > int(END_DATE):
+                    period['end_time'] = int(END_DATE)
+
+                # After clamping, make sure it's still a valid period
+                if period['end_time'] > period['start_time']:
+                    clamped_periods.append(period)
+        # Replace with our "clamped" list. If empty, we'll remove that key altogether.
+        troves[key] = clamped_periods
+        if not troves[key]:
             del troves[key]
     
     # Calculate time-weighted collateral for each asset

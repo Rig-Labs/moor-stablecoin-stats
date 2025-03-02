@@ -6,19 +6,19 @@ import os
 
 # Constants
 GRAPHQL_URL = os.getenv('GRAPHQL_URL', 'https://stats.fluidprotocol.xyz/v1/graphql')
-TOTAL_REWARDS = 4_010_000 # 4,010,000 FUEL
+TOTAL_REWARDS = 1_800_000 # 1,800,000 FUEL
 ETH_SHARE = 0.45
 FUEL_SHARE = 0.55
 PRECISION = 1e9
 
 
 # Debug output for specific user
-DEBUG_WALLET = "0xc0d78f5af8807319b3698045205e2e3232cda12b7cfe957038d15806de68b1b7"
-DEBUG_ASSET = "ETH"
+DEBUG_WALLET = ""
+DEBUG_ASSET = "FUEL"
 
 # Time period constants
 START_DATE = datetime(2025, 1, 15).timestamp()
-END_DATE = datetime(2025, 2, 15).timestamp()
+END_DATE = datetime(2025, 3, 1).timestamp()
 TOTAL_PERIOD = END_DATE - START_DATE
 
 # Set up GraphQL client

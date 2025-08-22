@@ -7,7 +7,6 @@ from queries import (
     TOTAL_SUPPLY_QUERY,
     MINT_BURN_QUERIES,
     TROVE_EVENTS_QUERY,
-    FPT_STAKING_QUERY,
     STABILITY_POOL_QUERY,
     REDEMPTION_QUERY,
     LIQUIDATION_QUERY,
@@ -20,14 +19,13 @@ GRAPHQL_URL = os.getenv('GRAPHQL_URL', 'http://localhost:8080/v1/graphql')
 
 # Set up the GraphQL client
 transport = RequestsHTTPTransport(url=GRAPHQL_URL)
-client = Client(transport=transport, fetch_schema_from_transport=True)
+client = Client(transport=transport, fetch_schema_from_transport=False)
 
 # Convert the query strings to gql objects
 query = gql(TOTAL_SUPPLY_QUERY)
 mint_query = gql(MINT_BURN_QUERIES["mint"])
 burn_query = gql(MINT_BURN_QUERIES["burn"])
 trove_events_query = gql(TROVE_EVENTS_QUERY)
-fpt_staking_query = gql(FPT_STAKING_QUERY)
 stability_pool_query = gql(STABILITY_POOL_QUERY)
 redemption_query = gql(REDEMPTION_QUERY)
 liquidation_query = gql(LIQUIDATION_QUERY)
@@ -43,12 +41,12 @@ def fetch_and_process_data():
     result = client.execute(query)
     
     # Convert to DataFrame
-    df = pd.DataFrame(result['USDF_TotalSupplyEvent'])
+    df = pd.DataFrame(result['USDM_TotalSupplyEvent'])
     
     # Convert timestamp to datetime
     df['timestamp'] = pd.to_datetime(df['timestamp'], unit='s')
     
-    # Convert amount from wei to USDF (assuming 18 decimals)
+    # Convert amount from wei to USDM (assuming 18 decimals)
     df['amount'] = df['amount'].astype(float) / PRECISION
     
     # Filter out rows with large jumps
@@ -65,8 +63,8 @@ def fetch_mint_burn_data():
     burn_result = client.execute(burn_query)
     
     # Convert to DataFrames
-    mint_df = process_df(pd.DataFrame(mint_result['USDF_Mint']))
-    burn_df = process_df(pd.DataFrame(burn_result['USDF_Burn']))
+    mint_df = process_df(pd.DataFrame(mint_result['USDM_Mint']))
+    burn_df = process_df(pd.DataFrame(burn_result['USDM_Burn']))
     
     # Group by day and sum the amounts
     mint_df = mint_df.groupby(mint_df['timestamp'].dt.date)['amount'].sum().reset_index()
@@ -117,31 +115,7 @@ def fetch_trove_data():
     
     return grouped
 
-def fetch_fpt_staking_data():
-    """Fetch and process FPT staking events"""
-    result = client.execute(fpt_staking_query)
-    
-    # Convert to DataFrames and process
-    stakes_df = process_df(pd.DataFrame(result['stakes']))
-    unstakes_df = process_df(pd.DataFrame(result['unstakes']))
-    
-    # Group by day and sum the amounts
-    stakes_df = stakes_df.groupby(stakes_df['timestamp'].dt.date)['amount'].sum().reset_index()
-    unstakes_df = unstakes_df.groupby(unstakes_df['timestamp'].dt.date)['amount'].sum().reset_index()
-    
-    # Label the events
-    stakes_df['type'] = 'Stake'
-    unstakes_df['type'] = 'Unstake'
-    unstakes_df['amount'] = -unstakes_df['amount']  # Make unstakes negative
-    
-    # Combine stake and unstake data
-    combined_df = pd.concat([stakes_df, unstakes_df])
-    
-    # Calculate running total of staked FPT
-    combined_df = combined_df.sort_values('timestamp')
-    combined_df['total_staked'] = combined_df['amount'].cumsum()
-    
-    return combined_df
+
 
 def fetch_stability_pool_data():
     """Fetch and process Stability Pool deposit/withdrawal events"""
@@ -176,12 +150,12 @@ def fetch_redemption_data():
     
     # Check if dataframe is empty
     if df.empty:
-        return pd.DataFrame(columns=['timestamp', 'asset', 'usdf_amount', 
+        return pd.DataFrame(columns=['timestamp', 'asset', 'usdm_amount', 
                                    'collateral_amount', 'collateral_price'])
     
     # Process data only if df is not empty
     df['timestamp'] = pd.to_datetime(df['timestamp'], unit='s')
-    df['usdf_amount'] = df['usdf_amount'].astype(float) / PRECISION
+    df['usdm_amount'] = df['usdm_amount'].astype(float) / PRECISION
     df['collateral_amount'] = df['collateral_amount'].astype(float) / PRECISION
     df['collateral_price'] = df['collateral_price'].astype(float) / PRECISION
     return df
@@ -244,7 +218,6 @@ try:
     df = fetch_and_process_data()
     mint_df, burn_df = fetch_mint_burn_data()
     trove_data = fetch_trove_data()
-    fpt_data = fetch_fpt_staking_data()
     stability_pool_data = fetch_stability_pool_data()
     redemption_data = fetch_redemption_data()
     liquidation_data = fetch_liquidation_data()
@@ -252,7 +225,7 @@ try:
     # Calculate current and 2-week-ago values for each metric
     two_weeks_ago = pd.Timestamp.now() - pd.Timedelta(days=14)
 
-    # 1. Total USDF Supply
+    # 1. Total USDM Supply
     current_supply = df.iloc[-1]['amount'] if not df.empty else 0
     past_supply = df[df['timestamp'] < two_weeks_ago].iloc[-1]['amount'] if not df.empty else 0
     supply_delta = current_supply - past_supply
@@ -267,10 +240,7 @@ try:
     past_sp = stability_pool_data[pd.to_datetime(stability_pool_data['timestamp']) < two_weeks_ago].iloc[-1]['total_deposited'] if not stability_pool_data.empty else 0
     sp_delta = current_sp - past_sp
 
-    # 4. Total FPT Staked
-    current_fpt = fpt_data.iloc[-1]['total_staked'] if not fpt_data.empty else 0
-    past_fpt = fpt_data[pd.to_datetime(fpt_data['timestamp']) < two_weeks_ago].iloc[-1]['total_staked'] if not fpt_data.empty else 0
-    fpt_delta = current_fpt - past_fpt
+
 
     # 5. Total Liquidations (last 2 weeks)
     current_liquidations = liquidation_data[pd.to_datetime(liquidation_data['timestamp']) >= two_weeks_ago]['debt'].sum() if not liquidation_data.empty else 0
@@ -280,18 +250,11 @@ try:
 
     # Calculate total mints for last 2 weeks
     two_weeks_mints = mint_df[pd.to_datetime(mint_df['timestamp']) >= two_weeks_ago]['amount'].sum()
-    two_week_distribution = two_weeks_mints / 200  # USDF distributed to FPT stakers
-    
-    # Calculate FPT APR
-    if current_fpt > 0:  # Avoid division by zero
-        annual_distribution = two_week_distribution * 26  # Annualize the distribution
-        apr = (annual_distribution / current_fpt) * 100  # Convert to percentage
-    else:
-        apr = 0
+    two_week_distribution = two_weeks_mints / 200  # USDM distributed to stakers
 
     # Display metrics
     with col1:
-        st.metric("Total USDF (2W Δ)", 
+        st.metric("Total USDM (2W Δ)", 
                  format_number(current_supply), 
                  format_number(supply_delta))
     with col2:
@@ -303,20 +266,16 @@ try:
                  format_number(current_sp), 
                  format_number(sp_delta))
     with col4:
-        st.metric("FPT Staked (2W Δ)", 
-                 format_number(current_fpt), 
-                 format_number(fpt_delta))
-    with col5:
-        st.metric("USDF to Stakers (2W)", 
+        st.metric("USDM to Stakers (2W)", 
                  f"{format_number(two_week_distribution)}")
     
     # Total Supply Chart
-    st.subheader('USDF Total Supply Over Time')
+    st.subheader('USDM Total Supply Over Time')
     fig_supply = px.line(df, 
                         x='timestamp', 
                         y='amount',
-                        title='USDF Total Supply',
-                        labels={'timestamp': 'Date', 'amount': 'USDF Supply'})
+                        title='USDM Total Supply',
+                        labels={'timestamp': 'Date', 'amount': 'USDM Supply'})
     st.plotly_chart(fig_supply)
     
     # Convert mint amounts to positive and burn amounts to negative
@@ -328,19 +287,19 @@ try:
     combined_df = pd.concat([mint_df, burn_df])
 
     # Mint and Burn Combined Chart
-    st.subheader('USDF Mints and Burns')
+    st.subheader('USDM Mints and Burns')
     fig_combined = px.bar(combined_df,
                          x='timestamp',
                          y='amount',
                          color='type',
-                         title='Daily USDF Mints and Burns',
-                         labels={'timestamp': 'Date', 'amount': 'USDF Amount'},
+                         title='Daily USDM Mints and Burns',
+                         labels={'timestamp': 'Date', 'amount': 'USDM Amount'},
                          color_discrete_map={'Mint': 'green', 'Burn': 'red'})
     
     # Update layout to make it more readable
     fig_combined.update_layout(
         barmode='relative',  # Allows bars to stack from zero
-        yaxis_title='USDF Amount (+ Mints, - Burns)',
+        yaxis_title='USDM Amount (+ Mints, - Burns)',
         showlegend=True
     )
     st.plotly_chart(fig_combined)
@@ -364,34 +323,7 @@ try:
     )
     st.plotly_chart(fig_troves)
     
-    # Add FPT Staking Charts
-    st.subheader('FPT Staking Activity')
-    
-    # Daily Stakes/Unstakes
-    fig_fpt_daily = px.bar(fpt_data,
-                          x='timestamp',
-                          y='amount',
-                          color='type',
-                          title='Daily FPT Stakes and Unstakes',
-                          labels={'timestamp': 'Date', 
-                                 'amount': 'FPT Amount',
-                                 'type': 'Action'},
-                          color_discrete_map={'Stake': 'green', 'Unstake': 'red'})
-    fig_fpt_daily.update_layout(
-        barmode='relative',
-        yaxis_title='FPT Amount (+ Stakes, - Unstakes)',
-        showlegend=True
-    )
-    st.plotly_chart(fig_fpt_daily)
-    
-    # Total Staked FPT Over Time
-    fig_fpt_total = px.line(fpt_data,
-                           x='timestamp',
-                           y='total_staked',
-                           title='Total FPT Staked Over Time',
-                           labels={'timestamp': 'Date',
-                                  'total_staked': 'Total FPT Staked'})
-    st.plotly_chart(fig_fpt_total)
+
     
     # Add Stability Pool Charts
     st.subheader('Stability Pool Activity')
@@ -403,23 +335,23 @@ try:
                          color='type',
                          title='Daily Stability Pool Deposits and Withdrawals',
                          labels={'timestamp': 'Date', 
-                                'amount': 'USDF Amount',
+                                'amount': 'USDM Amount',
                                 'type': 'Action'},
                          color_discrete_map={'Deposit': 'green', 'Withdrawal': 'red'})
     fig_sp_daily.update_layout(
         barmode='relative',
-        yaxis_title='USDF Amount (+ Deposits, - Withdrawals)',
+        yaxis_title='USDM Amount (+ Deposits, - Withdrawals)',
         showlegend=True
     )
     st.plotly_chart(fig_sp_daily)
     
-    # Total Deposited USDF Over Time
+    # Total Deposited USDM Over Time
     fig_sp_total = px.line(stability_pool_data,
                           x='timestamp',
                           y='total_deposited',
-                          title='Total USDF in Stability Pool Over Time',
+                          title='Total USDM in Stability Pool Over Time',
                           labels={'timestamp': 'Date',
-                                 'total_deposited': 'Total USDF Deposited'})
+                                 'total_deposited': 'Total USDM Deposited'})
     st.plotly_chart(fig_sp_total)
     
     # Redemption Analytics Section
@@ -429,22 +361,22 @@ try:
         daily_redemptions = redemption_data.groupby(
             [redemption_data['timestamp'].dt.date, 'asset']
         ).agg({
-            'usdf_amount': 'sum',
+            'usdm_amount': 'sum',
             'collateral_amount': 'sum'
         }).reset_index()
         
         daily_redemptions['redemption_rate'] = (
-            daily_redemptions['collateral_amount'] / daily_redemptions['usdf_amount']
+            daily_redemptions['collateral_amount'] / daily_redemptions['usdm_amount']
         )
         
         # Redemption Volume Chart
         fig_redemptions = px.bar(daily_redemptions,
                                 x='timestamp',
-                                y='usdf_amount',
+                                y='usdm_amount',
                                 color='asset',
-                                title='Daily USDF Redemptions by Asset',
+                                title='Daily USDM Redemptions by Asset',
                                 labels={'timestamp': 'Date',
-                                       'usdf_amount': 'USDF Amount Redeemed',
+                                       'usdm_amount': 'USDM Amount Redeemed',
                                        'asset': 'Asset Type'})
         st.plotly_chart(fig_redemptions)
         
@@ -455,7 +387,7 @@ try:
                             color='asset',
                             title='Daily Redemption Rates by Asset',
                             labels={'timestamp': 'Date',
-                                   'redemption_rate': 'Collateral/USDF Rate',
+                                   'redemption_rate': 'Collateral/USDM Rate',
                                    'asset': 'Asset Type'})
         st.plotly_chart(fig_rates)
 
@@ -471,7 +403,7 @@ try:
                                  pattern_shape='type',
                                  title='Daily Liquidation Volume by Asset',
                                  labels={'timestamp': 'Date',
-                                        'debt': 'USDF Debt Liquidated',
+                                        'debt': 'USDM Debt Liquidated',
                                         'asset': 'Asset Type',
                                         'type': 'Liquidation Type'})
         st.plotly_chart(fig_liquidations)

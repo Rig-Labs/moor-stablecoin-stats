@@ -21,7 +21,7 @@ GRAPHQL_URL = os.getenv('GRAPHQL_URL', 'http://localhost:8080/v1/graphql')
 CACHE_TTL = 4*60*60
 
 transport = RequestsHTTPTransport(url=GRAPHQL_URL)
-client = Client(transport=transport, fetch_schema_from_transport=True)
+client = Client(transport=transport, fetch_schema_from_transport=False)
 
 @app.get("/distribution")
 @cache(expire=CACHE_TTL)  # Cache for 4 hours
@@ -29,7 +29,7 @@ async def get_distribution():
     try:
         two_weeks_ago = datetime.now() - timedelta(days=14)
         mint_result = client.execute(gql(MINT_BURN_QUERIES["mint"]))
-        mint_df = pd.DataFrame(mint_result['USDF_Mint'])
+        mint_df = pd.DataFrame(mint_result['USDM_Mint'])
         mint_df['timestamp'] = pd.to_datetime(mint_df['timestamp'], unit='s')
         mint_df['amount'] = mint_df['amount'].astype(float) / PRECISION
         

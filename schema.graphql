@@ -32,22 +32,6 @@ type BorrowOperations_AdjustTroveEvent {
   txHash: String!
 }
 
-type FPTStaking_StakeEvent {
-  id: ID!
-  identity: String! @index
-  amount: BigInt!
-  timestamp: Int!
-  txHash: String!
-}
-
-type FPTStaking_UnstakeEvent {
-  id: ID!
-  identity: String! @index
-  amount: BigInt!
-  timestamp: Int!
-  txHash: String!
-}
-
 type StabilityPool_StabilityPoolLiquidationEvent {
   id: ID!
   asset: String! @index
@@ -99,28 +83,28 @@ type TroveManager_RedemptionEvent {
   id: ID!
   identity: String! @index
   asset: String! @index
-  usdf_amount: BigInt!
+  usdm_amount: BigInt!
   collateral_amount: BigInt!
   collateral_price: BigInt!
   timestamp: Int!
   txHash: String!
 }
 
-type USDF_TotalSupplyEvent {
+type USDM_TotalSupplyEvent {
   id: ID!
   amount: BigInt!
   timestamp: Int!
   txHash: String!
 }
 
-type USDF_Mint {
+type USDM_Mint {
   id: ID!
   amount: BigInt!
   timestamp: Int!
   txHash: String!
 }
 
-type USDF_Burn {
+type USDM_Burn {
   id: ID!
   amount: BigInt!
   timestamp: Int!

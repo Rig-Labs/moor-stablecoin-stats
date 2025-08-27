@@ -1,4 +1,4 @@
-# GraphQL queries for Fluid Analytics
+# GraphQL queries for Moor Analytics
 
 TOTAL_SUPPLY_QUERY = """
     query {

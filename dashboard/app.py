@@ -240,8 +240,8 @@ def format_number(num):
         return f"{num:.3f}"
 
 # Streamlit app
-st.set_page_config(page_title="Fluid Analytics")
-st.title('Fluid Analytics')
+st.set_page_config(page_title="Moor Analytics")
+st.title('Moor Analytics')
 
 # Add metrics section
 col1, col2, col3, col4, col5 = st.columns(5)

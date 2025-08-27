@@ -32,6 +32,10 @@ liquidation_query = gql(LIQUIDATION_QUERY)
 
 def process_df(df):
     """Helper function to process dataframes"""
+    # Check if DataFrame is empty or missing required columns
+    if df.empty or 'timestamp' not in df.columns or 'amount' not in df.columns:
+        return pd.DataFrame(columns=['timestamp', 'amount'])
+    
     df['timestamp'] = pd.to_datetime(df['timestamp'], unit='s')
     df['amount'] = df['amount'].astype(float) / PRECISION
     return df
@@ -66,9 +70,19 @@ def fetch_mint_burn_data():
     mint_df = process_df(pd.DataFrame(mint_result['USDM_Mint']))
     burn_df = process_df(pd.DataFrame(burn_result['USDM_Burn']))
     
-    # Group by day and sum the amounts
-    mint_df = mint_df.groupby(mint_df['timestamp'].dt.date)['amount'].sum().reset_index()
-    burn_df = burn_df.groupby(burn_df['timestamp'].dt.date)['amount'].sum().reset_index()
+    # Handle empty DataFrames
+    if mint_df.empty and burn_df.empty:
+        empty_df = pd.DataFrame(columns=['timestamp', 'amount'])
+        return empty_df, empty_df
+    
+    # Group by day and sum the amounts (only if not empty)
+    if not mint_df.empty:
+        mint_df = mint_df.groupby(mint_df['timestamp'].dt.date)['amount'].sum().reset_index()
+        mint_df['timestamp'] = pd.to_datetime(mint_df['timestamp'])
+    
+    if not burn_df.empty:
+        burn_df = burn_df.groupby(burn_df['timestamp'].dt.date)['amount'].sum().reset_index()
+        burn_df['timestamp'] = pd.to_datetime(burn_df['timestamp'])
     
     return mint_df, burn_df
 
@@ -80,6 +94,10 @@ def fetch_trove_data():
     opens_df = pd.DataFrame(result['open'])
     closes_df = pd.DataFrame(result['close'])
     liquidations_df = pd.DataFrame(result['liquidation_full'])
+    
+    # Check if all DataFrames are empty
+    if opens_df.empty and closes_df.empty and liquidations_df.empty:
+        return pd.DataFrame(columns=['asset', 'timestamp', 'event', 'active_troves'])
     
     # Add event type column to each DataFrame
     opens_df['event'] = 1  # +1 for opens
@@ -93,6 +111,9 @@ def fetch_trove_data():
     # Group by asset and date, calculate running total of troves
     all_events = all_events.sort_values('timestamp')
     grouped = all_events.groupby(['asset', all_events['timestamp'].dt.date])['event'].sum().reset_index()
+    
+    # Convert the date column back to datetime for proper handling
+    grouped['timestamp'] = pd.to_datetime(grouped['timestamp'])
     
     # Create a complete date range
     date_range = pd.date_range(start=grouped['timestamp'].min(), 
@@ -125,9 +146,18 @@ def fetch_stability_pool_data():
     deposits_df = process_df(pd.DataFrame(result['deposits']))
     withdrawals_df = process_df(pd.DataFrame(result['withdrawals']))
     
-    # Group by day and sum the amounts
-    deposits_df = deposits_df.groupby(deposits_df['timestamp'].dt.date)['amount'].sum().reset_index()
-    withdrawals_df = withdrawals_df.groupby(withdrawals_df['timestamp'].dt.date)['amount'].sum().reset_index()
+    # Handle empty DataFrames
+    if deposits_df.empty and withdrawals_df.empty:
+        return pd.DataFrame(columns=['timestamp', 'amount', 'type', 'total_deposited'])
+    
+    # Group by day and sum the amounts (only if not empty)
+    if not deposits_df.empty:
+        deposits_df = deposits_df.groupby(deposits_df['timestamp'].dt.date)['amount'].sum().reset_index()
+        deposits_df['timestamp'] = pd.to_datetime(deposits_df['timestamp'])
+    
+    if not withdrawals_df.empty:
+        withdrawals_df = withdrawals_df.groupby(withdrawals_df['timestamp'].dt.date)['amount'].sum().reset_index()
+        withdrawals_df['timestamp'] = pd.to_datetime(withdrawals_df['timestamp'])
     
     # Label the events
     deposits_df['type'] = 'Deposit'
@@ -193,6 +223,9 @@ def fetch_liquidation_data():
             'collateral': 'sum'
         }).reset_index()
         
+        # Convert the date column back to datetime for proper handling
+        daily_liquidations['timestamp'] = pd.to_datetime(daily_liquidations['timestamp'])
+        
         return daily_liquidations
     
     return pd.DataFrame(columns=['timestamp', 'asset', 'type', 'debt', 'collateral'])
@@ -227,29 +260,34 @@ try:
 
     # 1. Total USDM Supply
     current_supply = df.iloc[-1]['amount'] if not df.empty else 0
-    past_supply = df[df['timestamp'] < two_weeks_ago].iloc[-1]['amount'] if not df.empty else 0
+    past_supply_df = df[df['timestamp'] < two_weeks_ago]
+    past_supply = past_supply_df.iloc[-1]['amount'] if not past_supply_df.empty else current_supply
     supply_delta = current_supply - past_supply
 
     # 2. Total Troves
     current_troves = trove_data.groupby('timestamp')['active_troves'].sum().iloc[-1] if not trove_data.empty else 0
-    past_troves = trove_data[pd.to_datetime(trove_data['timestamp']) < two_weeks_ago].groupby('timestamp')['active_troves'].sum().iloc[-1] if not trove_data.empty else 0
+    past_troves_df = trove_data[pd.to_datetime(trove_data['timestamp']) < two_weeks_ago]
+    past_troves = past_troves_df.groupby('timestamp')['active_troves'].sum().iloc[-1] if not past_troves_df.empty else current_troves
     troves_delta = current_troves - past_troves
 
     # 3. Stability Pool Deposits
     current_sp = stability_pool_data.iloc[-1]['total_deposited'] if not stability_pool_data.empty else 0
-    past_sp = stability_pool_data[pd.to_datetime(stability_pool_data['timestamp']) < two_weeks_ago].iloc[-1]['total_deposited'] if not stability_pool_data.empty else 0
+    past_sp_df = stability_pool_data[pd.to_datetime(stability_pool_data['timestamp']) < two_weeks_ago]
+    past_sp = past_sp_df.iloc[-1]['total_deposited'] if not past_sp_df.empty else current_sp
     sp_delta = current_sp - past_sp
 
 
 
     # 5. Total Liquidations (last 2 weeks)
     current_liquidations = liquidation_data[pd.to_datetime(liquidation_data['timestamp']) >= two_weeks_ago]['debt'].sum() if not liquidation_data.empty else 0
-    past_liquidations = liquidation_data[(pd.to_datetime(liquidation_data['timestamp']) < two_weeks_ago) & 
-                                       (pd.to_datetime(liquidation_data['timestamp']) >= two_weeks_ago - pd.Timedelta(days=14))]['debt'].sum() if not liquidation_data.empty else 0
+    past_liquidations_df = liquidation_data[(pd.to_datetime(liquidation_data['timestamp']) < two_weeks_ago) & 
+                                           (pd.to_datetime(liquidation_data['timestamp']) >= two_weeks_ago - pd.Timedelta(days=14))]
+    past_liquidations = past_liquidations_df['debt'].sum() if not past_liquidations_df.empty else 0
     liquidations_delta = current_liquidations - past_liquidations
 
     # Calculate total mints for last 2 weeks
-    two_weeks_mints = mint_df[pd.to_datetime(mint_df['timestamp']) >= two_weeks_ago]['amount'].sum()
+    two_weeks_mints_df = mint_df[pd.to_datetime(mint_df['timestamp']) >= two_weeks_ago] if not mint_df.empty else pd.DataFrame()
+    two_weeks_mints = two_weeks_mints_df['amount'].sum() if not two_weeks_mints_df.empty else 0
     two_week_distribution = two_weeks_mints / 200  # USDM distributed to stakers
 
     # Display metrics
@@ -270,89 +308,104 @@ try:
                  f"{format_number(two_week_distribution)}")
     
     # Total Supply Chart
-    st.subheader('USDM Total Supply Over Time')
-    fig_supply = px.line(df, 
-                        x='timestamp', 
-                        y='amount',
-                        title='USDM Total Supply',
-                        labels={'timestamp': 'Date', 'amount': 'USDM Supply'})
-    st.plotly_chart(fig_supply)
+    if not df.empty:
+        st.subheader('USDM Total Supply Over Time')
+        fig_supply = px.line(df, 
+                            x='timestamp', 
+                            y='amount',
+                            title='USDM Total Supply',
+                            labels={'timestamp': 'Date', 'amount': 'USDM Supply'})
+        st.plotly_chart(fig_supply)
+    else:
+        st.warning("No supply data available to display")
+        st.info("The dashboard will show empty charts when no data is available from the GraphQL endpoint")
     
     # Convert mint amounts to positive and burn amounts to negative
-    mint_df['type'] = 'Mint'
-    burn_df['type'] = 'Burn'
-    burn_df['amount'] = -burn_df['amount']  # Make burns negative
+    if not mint_df.empty:
+        mint_df['type'] = 'Mint'
+    if not burn_df.empty:
+        burn_df['type'] = 'Burn'
+        burn_df['amount'] = -burn_df['amount']  # Make burns negative
 
     # Combine mint and burn data
     combined_df = pd.concat([mint_df, burn_df])
 
     # Mint and Burn Combined Chart
-    st.subheader('USDM Mints and Burns')
-    fig_combined = px.bar(combined_df,
-                         x='timestamp',
-                         y='amount',
-                         color='type',
-                         title='Daily USDM Mints and Burns',
-                         labels={'timestamp': 'Date', 'amount': 'USDM Amount'},
-                         color_discrete_map={'Mint': 'green', 'Burn': 'red'})
-    
-    # Update layout to make it more readable
-    fig_combined.update_layout(
-        barmode='relative',  # Allows bars to stack from zero
-        yaxis_title='USDM Amount (+ Mints, - Burns)',
-        showlegend=True
-    )
-    st.plotly_chart(fig_combined)
+    if not combined_df.empty:
+        st.subheader('USDM Mints and Burns')
+        fig_combined = px.bar(combined_df,
+                             x='timestamp',
+                             y='amount',
+                             color='type',
+                             title='Daily USDM Mints and Burns',
+                             labels={'timestamp': 'Date', 'amount': 'USDM Amount'},
+                             color_discrete_map={'Mint': 'green', 'Burn': 'red'})
+        
+        # Update layout to make it more readable
+        fig_combined.update_layout(
+            barmode='relative',  # Allows bars to stack from zero
+            yaxis_title='USDM Amount (+ Mints, - Burns)',
+            showlegend=True
+        )
+        st.plotly_chart(fig_combined)
+    else:
+        st.warning("No mint/burn data available to display")
     
     # Add Troves Count Chart
-    st.subheader('Active Troves Count Over Time')
-    fig_troves = px.bar(trove_data,
-                       x='timestamp',
-                       y='active_troves',
-                       color='asset',
-                       title='Number of Active Troves by Asset',
-                       labels={'timestamp': 'Date', 
-                              'active_troves': 'Number of Active Troves',
-                              'asset': 'Asset Type'})
-    
-    # Update layout to stack the bars
-    fig_troves.update_layout(
-        barmode='stack',
-        xaxis_title='Date',
-        yaxis_title='Number of Active Troves'
-    )
-    st.plotly_chart(fig_troves)
+    if not trove_data.empty:
+        st.subheader('Active Troves Count Over Time')
+        fig_troves = px.bar(trove_data,
+                           x='timestamp',
+                           y='active_troves',
+                           color='asset',
+                           title='Number of Active Troves by Asset',
+                           labels={'timestamp': 'Date', 
+                                  'active_troves': 'Number of Active Troves',
+                                  'asset': 'Asset Type'})
+        
+        # Update layout to stack the bars
+        fig_troves.update_layout(
+            barmode='stack',
+            xaxis_title='Date',
+            yaxis_title='Number of Active Troves'
+        )
+        st.plotly_chart(fig_troves)
+    else:
+        st.warning("No trove data available to display")
     
 
     
     # Add Stability Pool Charts
-    st.subheader('Stability Pool Activity')
-    
-    # Daily Deposits/Withdrawals
-    fig_sp_daily = px.bar(stability_pool_data,
-                         x='timestamp',
-                         y='amount',
-                         color='type',
-                         title='Daily Stability Pool Deposits and Withdrawals',
-                         labels={'timestamp': 'Date', 
-                                'amount': 'USDM Amount',
-                                'type': 'Action'},
-                         color_discrete_map={'Deposit': 'green', 'Withdrawal': 'red'})
-    fig_sp_daily.update_layout(
-        barmode='relative',
-        yaxis_title='USDM Amount (+ Deposits, - Withdrawals)',
-        showlegend=True
-    )
-    st.plotly_chart(fig_sp_daily)
-    
-    # Total Deposited USDM Over Time
-    fig_sp_total = px.line(stability_pool_data,
-                          x='timestamp',
-                          y='total_deposited',
-                          title='Total USDM in Stability Pool Over Time',
-                          labels={'timestamp': 'Date',
-                                 'total_deposited': 'Total USDM Deposited'})
-    st.plotly_chart(fig_sp_total)
+    if not stability_pool_data.empty:
+        st.subheader('Stability Pool Activity')
+        
+        # Daily Deposits/Withdrawals
+        fig_sp_daily = px.bar(stability_pool_data,
+                             x='timestamp',
+                             y='amount',
+                             color='type',
+                             title='Daily Stability Pool Deposits and Withdrawals',
+                             labels={'timestamp': 'Date', 
+                                    'amount': 'USDM Amount',
+                                    'type': 'Action'},
+                             color_discrete_map={'Deposit': 'green', 'Withdrawal': 'red'})
+        fig_sp_daily.update_layout(
+            barmode='relative',
+            yaxis_title='USDM Amount (+ Deposits, - Withdrawals)',
+            showlegend=True
+        )
+        st.plotly_chart(fig_sp_daily)
+        
+        # Total Deposited USDM Over Time
+        fig_sp_total = px.line(stability_pool_data,
+                              x='timestamp',
+                              y='total_deposited',
+                              title='Total USDM in Stability Pool Over Time',
+                              labels={'timestamp': 'Date',
+                                     'total_deposited': 'Total USDM Deposited'})
+        st.plotly_chart(fig_sp_total)
+    else:
+        st.warning("No stability pool data available to display")
     
     # Redemption Analytics Section
     if not redemption_data.empty:
@@ -421,6 +474,9 @@ try:
                                                   'type': 'Liquidation Type'})
         st.plotly_chart(fig_liquidation_collateral)
 
-except Exception as e:
-    st.error(f"Error fetching or displaying data: {str(e)}")
 
+except Exception as e:
+    import traceback
+    st.error(f"Error fetching or displaying data: {str(e)}")
+    st.error(f"Error type: {type(e).__name__}")
+    st.error(f"Full traceback: {traceback.format_exc()}")

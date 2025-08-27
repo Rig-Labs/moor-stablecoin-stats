@@ -8,14 +8,11 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - GRAPHQL_URL=http://host.docker.internal:8080/v1/graphql
+      - GRAPHQL_URL=http://localhost:8080/v1/graphql
     volumes:
       - ./api:/app
     restart: always
-    networks:
-      - fluid-network
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+    network_mode: host
 
   dashboard:
     build:
@@ -24,17 +21,12 @@ services:
     ports:
       - "8501:8501"
     environment:
-      - GRAPHQL_URL=http://host.docker.internal:8080/v1/graphql
+      - GRAPHQL_URL=http://localhost:8080/v1/graphql
     volumes:
       - ./dashboard:/app
     depends_on:
       - api
     restart: always
-    networks:
-      - fluid-network
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+    network_mode: host
 
-networks:
-  fluid-network:
-    driver: bridge 
+ 

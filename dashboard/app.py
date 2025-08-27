@@ -243,6 +243,17 @@ def format_number(num):
 st.set_page_config(page_title="Moor Analytics")
 st.title('Moor Analytics')
 
+# Hide the deploy button using CSS
+hide_deploy_button = """
+<style>
+#MainMenu {visibility: hidden;}
+footer {visibility: hidden;}
+.st-emotion-cache-1vl639y {display: none !important;}
+[data-testid="stBaseButton-header"] {display: none !important;}
+</style>
+"""
+st.markdown(hide_deploy_button, unsafe_allow_html=True)
+
 # Add metrics section
 col1, col2, col3, col4, col5 = st.columns(5)
 

@@ -32,6 +32,22 @@ type BorrowOperations_AdjustTroveEvent {
   txHash: String!
 }
 
+type MoorStaking_StakeEvent {
+  id: ID!
+  identity: String! @index
+  amount: BigInt!
+  timestamp: Int!
+  txHash: String!
+}
+
+type MoorStaking_UnstakeEvent {
+  id: ID!
+  identity: String! @index
+  amount: BigInt!
+  timestamp: Int!
+  txHash: String!
+}
+
 type StabilityPool_StabilityPoolLiquidationEvent {
   id: ID!
   asset: String! @index

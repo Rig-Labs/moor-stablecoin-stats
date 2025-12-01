@@ -54,6 +54,19 @@ TROVE_EVENTS_QUERY = """
     }
 """
 
+MOOR_STAKING_QUERY = """
+    query {
+        stakes: MoorStaking_StakeEvent(order_by: {timestamp: asc}) {
+            amount
+            timestamp
+        }
+        unstakes: MoorStaking_UnstakeEvent(order_by: {timestamp: asc}) {
+            amount
+            timestamp
+        }
+    }
+"""
+
 STABILITY_POOL_QUERY = """
     query {
         deposits: StabilityPool_ProvideToStabilityPoolEvent(order_by: {timestamp: asc}) {

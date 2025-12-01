@@ -14,7 +14,7 @@ TOTAL_SUPPLY_QUERY = """
 MINT_BURN_QUERIES = {
     "mint": """
         query {
-            USD_Mint(
+            USDM_Mint(
                 order_by: {timestamp: asc}
             ) {
                 amount
@@ -49,6 +49,19 @@ TROVE_EVENTS_QUERY = """
         liquidation_full: TroveManager_TroveFullLiquidationEvent(order_by: {timestamp: asc}) {
             identity
             asset
+            timestamp
+        }
+    }
+"""
+
+MOOR_STAKING_QUERY = """
+    query {
+        stakes: MoorStaking_StakeEvent(order_by: {timestamp: asc}) {
+            amount
+            timestamp
+        }
+        unstakes: MoorStaking_UnstakeEvent(order_by: {timestamp: asc}) {
+            amount
             timestamp
         }
     }

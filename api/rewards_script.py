@@ -23,7 +23,7 @@ TOTAL_PERIOD = END_DATE - START_DATE
 
 # Set up GraphQL client
 transport = RequestsHTTPTransport(url=GRAPHQL_URL)
-client = Client(transport=transport, fetch_schema_from_transport=True)
+client = Client(transport=transport, fetch_schema_from_transport=False)
 
 # Query to get all relevant trove events
 TROVE_EVENTS_QUERY = """

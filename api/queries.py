@@ -1,8 +1,8 @@
-# GraphQL queries for Fluid Analytics
+# GraphQL queries for Moor Analytics
 
 TOTAL_SUPPLY_QUERY = """
     query {
-        USDF_TotalSupplyEvent(
+        USDM_TotalSupplyEvent(
             order_by: {timestamp: asc}
         ) {
             amount
@@ -14,7 +14,7 @@ TOTAL_SUPPLY_QUERY = """
 MINT_BURN_QUERIES = {
     "mint": """
         query {
-            USDF_Mint(
+            USDM_Mint(
                 order_by: {timestamp: asc}
             ) {
                 amount
@@ -24,7 +24,7 @@ MINT_BURN_QUERIES = {
     """,
     "burn": """
         query {
-            USDF_Burn(
+            USDM_Burn(
                 order_by: {timestamp: asc}
             ) {
                 amount
@@ -54,13 +54,13 @@ TROVE_EVENTS_QUERY = """
     }
 """
 
-FPT_STAKING_QUERY = """
+MOOR_STAKING_QUERY = """
     query {
-        stakes: FPTStaking_StakeEvent(order_by: {timestamp: asc}) {
+        stakes: MoorStaking_StakeEvent(order_by: {timestamp: asc}) {
             amount
             timestamp
         }
-        unstakes: FPTStaking_UnstakeEvent(order_by: {timestamp: asc}) {
+        unstakes: MoorStaking_UnstakeEvent(order_by: {timestamp: asc}) {
             amount
             timestamp
         }
@@ -84,7 +84,7 @@ REDEMPTION_QUERY = """
     query {
         TroveManager_RedemptionEvent(order_by: {timestamp: asc}) {
             asset
-            usdf_amount
+            usdm_amount
             collateral_amount
             collateral_price
             timestamp
